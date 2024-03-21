@@ -10,7 +10,7 @@ function sendMail( obj ) // obj is one row json object
         service: 'gmail',
         auth: {
             user: 'roshanpp20@gmail.com',
-            pass: 'ihhs rjdp buew zfiu'
+            pass: 'ihhs rjdp buew zfia'
         }
     });
     
