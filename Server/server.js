@@ -1,75 +1,58 @@
-const express = require('express');
-const multer = require('multer');
-const csv = require('csv-parser');
-const fs = require('fs');
-const cors = require('cors')
-
+const express = require("express");
+const path = require("path");
+const parseCSV = require("./utils/parseCSV");
+const parseMessages = require("./utils/parseMessages");
+const sendEmail = require("./utils/sendEmail");
+const uploadCSV = require("./utils/upload");
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const PORT = 8082;
 
-app.use(cors())
+//!Define the path of Uploaded CSV file
+const filePath = path.join(__dirname, "uploads/file.csv");
 
-app.post('/upload', upload.single('file'), (req, res) => {
-  const filePath = req.file.path;
-  const sendMail  = require('./nodeMailer');
-const results = [];
-const columnHeaders = []
+//!Middleware
+//to parse form data
+app.use(express.urlencoded({ extended: false }));
+//to render staic files
+app.use(express.static(path.join(__dirname, "public")));
 
-let unSuccessfulSend = []
-let successfulSend = []
+let headers, data;
+let messages = [];
 
+//!Routes
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/home.html"));
+});
 
-fs.createReadStream(filePath)
-  .pipe(csv())
-  // For Converting all headers to LOWERCASE
-  .on('headers', (headers) => {
-    // 'headers' event is emitted once with the array of column headers
-    console.log('Original column headers:', headers);
-    
-    // Convert each header to lowercase and store them
-    const lowercaseHeaders = headers.map(header => header.toLowerCase());
-    console.log('Lowercase column headers:', lowercaseHeaders);
-    columnHeaders.push(...lowercaseHeaders);
-  })
-////////////////////////////////////
-.on('data', (data) => {
-    results.push(data);
-  })
-////////////////////////////////////
+app.post("/send", uploadCSV.single("file"), async (req, res) => {
+  const message = req.body.message;
+  const csvToJSON = await parseCSV(filePath);
+  headers = csvToJSON.headers;
+  data = csvToJSON.data;
+  console.log(message + headers + data);
 
-  .on('end', async () => {
-    console.log('All data:', results); // Log all data for debugging
+  //!Change message according to the CSV file and update data
+  messages = await parseMessages(headers, data, message);
+  //console.log(messages);
 
-    // Use Promise.all() to await all sendMail promises
-    const sendPromises = results.map(async (data) => { // data parameter is one json Object from results array
-      try {
-        await sendMail(data);
-        return true; // Mark email as successfully sent
-      } catch (error) {
-        console.error('Error sending email:', error);
-        return false; // Mark email as failed to send
-      }
-    });
-
-    const sendResults = await Promise.all(sendPromises);
-    
-    sendResults.forEach((success, index) => {
-      if (success) {
-        successfulSend.push(results[index]);
-      } else {
-        unSuccessfulSend.push(results[index]);
-      }
-    });
-      console.log(successfulSend.length);
-      res.status(200).json({
-        success : successfulSend , 
-        failed : unSuccessfulSend
-      })
-  });
+  //!Sending Mail- UNCOMMET TO MAIL
+    try
+    {
+      messages.forEach(async (message, index) => {
+        console.log("data is : " , data[index]);
+        sendEmail(data[index].email, "Test", message).then((response) => { 
+             res.json({
+               msg : "Succesfully Sends The Message"
+             })
+        })
+         });
+    }
+    catch(error)
+    {
+      console.log("error Occured : " , error);
+    }
 
 });
 
-const PORT =  3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+//!Start the server
+app.listen(PORT, console.log(`Server started at http://localhost:${PORT}`));
